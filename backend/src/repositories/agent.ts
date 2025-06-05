@@ -1,4 +1,3 @@
-import { Bindings } from "../models/db";
 import { Agent, Metrics } from "../models/agent";
 import { agents, agentMetrics24h } from "../db/schema";
 import { db } from "../config";
@@ -80,8 +79,12 @@ export async function updateAgent(
 ) {
   agent.updated_at = new Date().toISOString();
   
+  // 从 agent 对象中排除 id 等索引相关属性，避免更新主键
+  const { id, token, created_by, ...updateData } = agent;
+
   try {
-    const updatedAgent = await db.update(agents).set(agent).where(eq(agents.id, agent.id)).returning();
+    // 确保 updateData 中不包含 id
+    const updatedAgent = await db.update(agents).set(updateData).where(eq(agents.id, id)).returning();
     return updatedAgent[0];
   } catch (error) {
     console.error("更新客户端失败:", error);
@@ -111,10 +114,11 @@ export async function getAgentByToken(token: string) {
 
 // 获取活跃状态的客户端
 export async function getActiveAgents() {
-  return await db
-    .select("id", "name", "updated_at", "keepalive")
-    .from(agents)
-    .where(eq(agents.status, "active"));
+  const activeAgents = await db
+   .select()
+   .from(agents)
+   .where(eq(agents.status, "active"));
+  return activeAgents;
 }
 
 // 设置客户端为离线状态

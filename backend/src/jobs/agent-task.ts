@@ -7,12 +7,11 @@ import {
 } from "../services";
 import { shouldSendNotification, sendNotification } from "../services";
 import { Hono } from "hono";
-import { Bindings } from "../models/db";
 import { db } from "../config";
-import { eq } from "drizzle-orm";
-import { notificationSettings } from "../db/schema";
+import { eq,lt } from "drizzle-orm";
+import { notificationSettings,agentMetrics24h } from "../db/schema";
 
-const agentTask = new Hono<{ Bindings: Bindings }>();
+const agentTask = new Hono<{}>();
 
 interface AgentResult {
   id: number;
@@ -27,19 +26,20 @@ export const checkAgentsStatus = async (c: any) => {
     console.log("定时任务: 检查客户端状态...");
 
     // 检查所有客户端的最后更新时间，如果超过60分钟没有更新，将状态设置为inactive
-    const inactiveThreshold = 60 * 60 * 1000; // 60分钟，单位毫秒
     const now = new Date();
 
     // 查询所有状态为active的客户端
-    const activeAgents = await getActiveAgents(c.env);
+    const activeAgents = await getActiveAgents();
 
-    if (!activeAgents.results || activeAgents.results.length === 0) {
+    console.log("定时任务: 活跃状态的客户端数量:", activeAgents); // 调试用，输出活跃客户端数量，确保正确获取到数据
+
+    if (!activeAgents || activeAgents.length === 0) {
       console.log("定时任务: 没有活跃状态的客户端");
       return;
     }
 
     // 检查每个活跃客户端的最后更新时间
-    for (const agent of activeAgents.results as AgentResult[]) {
+    for (const agent of activeAgents as AgentResult[]) {
       const lastUpdateTime = new Date(agent.updated_at);
       const timeDiff = now.getTime() - lastUpdateTime.getTime();
 
@@ -50,7 +50,7 @@ export const checkAgentsStatus = async (c: any) => {
         );
 
         // 更新客户端状态为inactive
-        await setAgentInactive(c.env, agent.id);
+        await setAgentInactive(agent.id);
 
         // 处理通知
         await handleAgentOfflineNotification(c.env, agent.id, agent.name);
@@ -298,9 +298,7 @@ export default {
 
     if (hour % 6 === 0 && minute === 5) {
       console.log("定时任务: 正在清理 metrics 24h 表数据...");
-      await env.DB.prepare("DELETE FROM agent_metrics_24h WHERE timestamp < ?")
-        .bind(yesterday)
-        .run();
+      await db.delete(agentMetrics24h).where(lt(agentMetrics24h.timestamp, yesterday));
     }
 
     return result;

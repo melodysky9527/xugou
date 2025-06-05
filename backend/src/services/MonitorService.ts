@@ -96,6 +96,8 @@ export async function checkMonitor(monitor: models.Monitor) {
       error
     );
 
+    console.log(`监控 ${monitor.name} (${monitor.url}) 检查完成.`);
+
     // 更新监控状态
     await repositories.updateMonitorStatus(monitor.id, status, responseTime);
 
